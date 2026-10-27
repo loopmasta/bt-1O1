@@ -1,10 +1,10 @@
-# bt1o1
+# bt-1O1
 
 an acid bass line in the spirit of the TB-303, with a kick and a hihat.
 
-![bt1o1](bt1o1.png)
+![bt-1O1](bt-1O1.png)
 
-bt1o1 is a monophonic 303-style bass voice (saw or square, 4-pole resonant lowpass, accent, slide, drive) played by a 16-step sequencer, plus a kick and a hihat with their own 16-step pattern. it follows the norns clock, so it also syncs to external MIDI clock. the pattern and all settings are saved automatically and come back at the next start.
+bt-1O1 is a monophonic 303-style bass voice (saw or square, 4-pole resonant lowpass, accent, slide, drive) played by a 16-step sequencer, plus a kick and a hihat with their own 16-step pattern. it follows the norns clock, so it also syncs to external MIDI clock. the pattern and all settings are saved automatically and come back at the next start.
 
 ## requirements
 
@@ -52,7 +52,7 @@ the drums always loop 16 steps, so a shorter bass line drifts against them. an o
 
 ### sync
 
-bt1o1 plays sixteenths on the norns clock. with PARAMS > CLOCK > source = midi it follows external MIDI clock; MIDI start restarts at step 1, MIDI stop stops.
+bt-1O1 plays sixteenths on the norns clock. with PARAMS > CLOCK > source = midi it follows external MIDI clock; MIDI start restarts at step 1, MIDI stop stops.
 
 ### default pattern
 
@@ -66,11 +66,11 @@ Josh Wink, "Higher State of Consciousness", after the transcription on [JonDent'
 
 ### files
 
-- `dust/data/bt1o1/pattern.lua`: the bass and drum patterns
-- `dust/data/bt1o1/last.pset`: the params, written on exit
+- `dust/data/bt-1O1/pattern.lua`: the bass and drum patterns
+- `dust/data/bt-1O1/last.pset`: the params, written on exit
 
 ## install
 
-copy `bt1o1.lua` and `lib/` to `dust/code/bt1o1/`.
+copy `bt-1O1.lua` and `lib/` to `dust/code/bt-1O1/`.
 
-bt1o1 brings its own SuperCollider engine (`lib/Engine_Bt1o1.sc`). after installing or updating, **restart norns once** (SYSTEM > RESTART), so SuperCollider picks it up.
+bt-1O1 brings its own SuperCollider engine (`lib/Engine_Bt1o1.sc`). after installing or updating, **restart norns once** (SYSTEM > RESTART), so SuperCollider picks it up.

@@ -1,4 +1,4 @@
-// 303-style acid bass voice for bt1o1 (one synth, always running), kick and hihat
+// 303-style acid bass voice for bt-1O1 (one synth, always running), kick and hihat
 
 Engine_Bt1o1 : CroneEngine {
 

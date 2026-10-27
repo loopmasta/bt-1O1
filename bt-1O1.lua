@@ -1,4 +1,4 @@
--- bt1o1 v0.1.0 by loopmasta
+-- bt-1O1 v0.1.0 by loopmasta
 --  __          __          __
 --    |        /   |        /   |
 --    |       /    |       /    |
@@ -210,7 +210,7 @@ end
 -- saving ---------------------------------------------------------------------
 
 local function save_pattern()
-  local lines = {"-- bt1o1 pattern", "return {"}
+  local lines = {"-- bt-1O1 pattern", "return {"}
   for _, s in ipairs(steps) do
     table.insert(lines, string.format("  {note = %d, octave = %d, gate = %s, accent = %s, slide = %s},",
       s.note, s.octave, tostring(s.gate), tostring(s.accent), tostring(s.slide)))
@@ -225,7 +225,7 @@ local function save_pattern()
   local tmp = pattern_file() .. ".tmp"
   local f = io.open(tmp, "w")
   if not f then
-    print("bt1o1: can't save the pattern")
+    print("bt-1O1: can't save the pattern")
     return
   end
   f:write(table.concat(lines, "\n") .. "\n")
@@ -259,7 +259,7 @@ local function load_pattern()
         end
       end
     else
-      print("bt1o1: can't load the pattern: " .. tostring(loaded))
+      print("bt-1O1: can't load the pattern: " .. tostring(loaded))
     end
   end
   return pattern, drum_pattern
@@ -287,7 +287,7 @@ local function fmt_tune(p)
 end
 
 local function add_params()
-  params:add_separator("bt1o1", "bt1o1")
+  params:add_separator("bt1o1", "bt-1O1")
 
   params:add_group("bt1o1_sound", "SOUND", 9)
 
