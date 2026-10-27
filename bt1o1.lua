@@ -13,6 +13,9 @@ local STEPS = 16
 local BASE_NOTE = 36  -- C2: note 0, octave 0
 local LATENCY = 0.025 -- every step sounds this long after its sixteenth on the clock
 local GATE = 0.5      -- gate length, in steps
+local DRUM_STEPS = 16 -- the drums always loop one bar, whatever the bass length
+local PAGES = {"SEQ", "SOUND", "DRUM"}
+local HAT_NAMES = {"HH", "OH"} -- hat 1 closed, 2 open
 
 local NOTE_NAMES = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 local SCALES = {
@@ -38,17 +41,22 @@ local KNOBS = {
   {id = "drive", label = "DRV"},
 }
 
--- a demo line for the first start
+-- the default pattern: Josh Wink, "Higher State of Consciousness" (1995),
+-- after the transcription on djjondent.blogspot.com (famous 303 bassline
+-- patterns): G, G up an octave and B, every step accented.
+-- {note, octave, gate, accent, slide}
 local DEMO = {
-  {0, 0, true, true, false}, {0, 0, true, false, false}, {12, 0, true, false, true}, {0, 0, true, false, false},
-  {3, 0, true, true, false}, {0, 0, false, false, false}, {0, 0, true, false, false}, {10, -1, true, false, true},
-  {0, 0, true, true, false}, {7, 0, true, false, false}, {0, 1, true, false, false}, {0, 0, false, false, false},
-  {3, 0, true, true, true}, {5, 0, true, false, false}, {0, 0, true, false, false}, {7, -1, true, true, false},
+  {7, 0, true, true, true}, {7, 1, true, true, false}, {7, 0, true, true, true}, {7, 0, true, true, true},
+  {7, 0, true, true, false}, {7, 0, true, true, false}, {11, 0, true, true, false}, {7, 0, true, true, false},
+  {11, 0, true, true, false}, {7, 0, true, true, true}, {7, 0, true, true, false}, {11, 0, true, true, false},
+  {7, 0, true, true, true}, {7, 0, true, true, true}, {7, 0, true, true, false}, {11, 0, true, true, false},
 }
 
 local steps = {}
 local selected = 1
-local page = 1 -- 1 SEQ, 2 SOUND
+local drums = {}       -- {kick = bool, hat = 0 off / 1 closed / 2 open}
+local drum_selected = 1
+local page = 1 -- 1 SEQ, 2 SOUND, 3 DRUM
 local knob = 2 -- picked knob on SOUND (cutoff)
 local k1_held = false
 local ready = false -- init done: keys and encoders can come in before (the params don't exist yet)
@@ -56,7 +64,9 @@ local ready = false -- init done: keys and encoders can come in before (the para
 local running = false
 local seq_clock = nil
 local position = 0    -- the step sent last (0 before the first)
+local ticks = 0       -- sixteenths since start: the drum step is ticks % 16 + 1
 local playhead = nil  -- the step shown as playing
+local drum_playhead = nil
 local sliding = false -- the gate was held open for a slide into the next step
 
 local message = nil
@@ -89,6 +99,25 @@ local function demo_pattern()
   return pattern
 end
 
+-- default drums: kick on the beats, closed hat on the offbeats
+local function demo_drums()
+  local pattern = {}
+  for i = 1, DRUM_STEPS do
+    pattern[i] = {kick = i % 4 == 1, hat = i % 4 == 3 and 1 or 0}
+  end
+  return pattern
+end
+
+local function play_kick(delay)
+  engine.kick(delay, params:get("kick_level") * params:get("drum_level"),
+    params:get("kick_tune"), params:get("kick_decay"))
+end
+
+local function play_hat(delay, hat)
+  engine.hat(delay, params:get("hat_level") * params:get("drum_level"),
+    params:get(hat == 2 and "hat_open_decay" or "hat_decay"))
+end
+
 -- sequencer ------------------------------------------------------------------
 
 local function play_step(i, delay)
@@ -114,8 +143,18 @@ local function run()
     -- (from the nearest sixteenth, in case it wakes a hair early)
     local beats = clock.get_beats()
     local late = (beats - math.floor(beats * 4 + 0.5) / 4) * clock.get_beat_sec()
+    local delay = math.max(0, LATENCY - late)
+    -- the drums count sixteenths since start, not bass steps, so they keep
+    -- the bar whatever the bass length
+    local d = ticks % DRUM_STEPS + 1
+    if params:get("drums") == 2 then
+      if drums[d].kick then play_kick(delay) end
+      if drums[d].hat > 0 then play_hat(delay, drums[d].hat) end
+    end
+    drum_playhead = d
+    ticks = ticks + 1
     position = position % length() + 1
-    play_step(position, math.max(0, LATENCY - late))
+    play_step(position, delay)
     playhead = position
     dirty = true
   end
@@ -127,6 +166,7 @@ local function stop()
   running = false
   sliding = false
   playhead = nil
+  drum_playhead = nil
   engine.off(0)
   dirty = true
 end
@@ -135,6 +175,7 @@ end
 local function start()
   stop()
   position = 0
+  ticks = 0
   running = true
   seq_clock = clock.run(run)
 end
@@ -144,6 +185,13 @@ local function preview(step)
   if running or not step.gate then return end
   engine.note(0, midi_note(step), step.accent and 1 or 0, 0)
   engine.off(0.2)
+end
+
+-- while stopped: hear the drum step's sounds
+local function preview_drums(d)
+  if running then return end
+  if d.kick then play_kick(0) end
+  if d.hat > 0 then play_hat(0, d.hat) end
 end
 
 local function randomize()
@@ -167,6 +215,11 @@ local function save_pattern()
     table.insert(lines, string.format("  {note = %d, octave = %d, gate = %s, accent = %s, slide = %s},",
       s.note, s.octave, tostring(s.gate), tostring(s.accent), tostring(s.slide)))
   end
+  table.insert(lines, "  drums = {")
+  for _, d in ipairs(drums) do
+    table.insert(lines, string.format("    {kick = %s, hat = %d},", tostring(d.kick), d.hat))
+  end
+  table.insert(lines, "  },")
   table.insert(lines, "}")
 
   local tmp = pattern_file() .. ".tmp"
@@ -180,9 +233,12 @@ local function save_pattern()
   os.rename(tmp, pattern_file())
 end
 
--- the saved pattern, or the demo; missing or broken steps are filled in
+-- the saved pattern, or the demo; missing or broken steps are filled in.
+-- returns the bass steps and the drum steps (patterns saved before the drums
+-- existed get the default drums)
 local function load_pattern()
   local pattern = demo_pattern()
+  local drum_pattern = demo_drums()
   if util.file_exists(pattern_file()) then
     local ok, loaded = pcall(dofile, pattern_file())
     if ok and type(loaded) == "table" then
@@ -194,11 +250,19 @@ local function load_pattern()
             s.gate == true, s.accent == true, s.slide == true)
         end
       end
+      if type(loaded.drums) == "table" then
+        for i = 1, DRUM_STEPS do
+          local d = loaded.drums[i]
+          if type(d) == "table" then
+            drum_pattern[i] = {kick = d.kick == true, hat = util.clamp(math.floor(tonumber(d.hat) or 0), 0, 2)}
+          end
+        end
+      end
     else
       print("bt1o1: can't load the pattern: " .. tostring(loaded))
     end
   end
-  return pattern
+  return pattern, drum_pattern
 end
 
 -- params ---------------------------------------------------------------------
@@ -254,12 +318,25 @@ local function add_params()
   local scale_names = {}
   for i, s in ipairs(SCALES) do scale_names[i] = s.name end
   params:add_option("scale", "scale", scale_names, 1)
+
+  params:add_group("bt1o1_drums", "DRUMS", 8)
+  params:add_option("drums", "drums", {"off", "on"}, 2)
+  params:add_control("drum_level", "drums level", controlspec.new(0, 1, "lin", 0, 1, ""), fmt_percent)
+  params:add_control("kick_level", "kick level", controlspec.new(0, 1, "lin", 0, 0.6, ""), fmt_percent)
+  params:add_control("kick_tune", "kick tune", controlspec.new(30, 100, "exp", 0, 50, "Hz"), fmt_hz)
+  params:add_control("kick_decay", "kick decay", controlspec.new(0.1, 1.5, "exp", 0, 0.4, "s"), fmt_seconds)
+  params:add_control("hat_level", "hat level", controlspec.new(0, 1, "lin", 0, 0.5, ""), fmt_percent)
+  params:add_control("hat_decay", "closed decay", controlspec.new(0.02, 0.3, "exp", 0, 0.06, "s"), fmt_seconds)
+  params:add_control("hat_open_decay", "open decay", controlspec.new(0.1, 1.5, "exp", 0, 0.5, "s"), fmt_seconds)
+  for _, id in ipairs({"drums", "drum_level"}) do
+    params:set_action(id, function() dirty = true end)
+  end
 end
 
 -- norns -----------------------------------------------------------------------
 
 function init()
-  steps = load_pattern()
+  steps, drums = load_pattern()
   add_params()
   if util.file_exists(pset_file()) then params:read(pset_file()) end
   params:bang()
@@ -304,8 +381,20 @@ function key(n, z)
       step.gate = not step.gate
       preview(step)
     end
+  elseif page == 3 then
+    local d = drums[drum_selected]
+    if n == 2 and not k1_held then
+      d.kick = not d.kick
+      preview_drums({kick = d.kick, hat = 0})
+    elseif n == 2 then
+      d.hat = (d.hat + 1) % 3 -- off, closed, open
+      preview_drums({kick = false, hat = d.hat})
+    end
   elseif n == 2 and k1_held then
     randomize()
+  elseif n == 2 then
+    params:set("drums", params:get("drums") == 2 and 1 or 2)
+    show("drums " .. params:string("drums"))
   end
   dirty = true
 end
@@ -313,7 +402,7 @@ end
 function enc(n, d)
   if not ready then return end
   if n == 1 and k1_held then
-    page = util.clamp(page + d, 1, 2)
+    page = util.clamp(page + d, 1, #PAGES)
   elseif page == 1 then
     local step = steps[selected]
     if n == 1 then
@@ -329,6 +418,16 @@ function enc(n, d)
       step.octave = util.clamp(step.octave + d, -1, 1)
       step.gate = true
       preview(step)
+    end
+  elseif page == 3 then
+    if n == 1 then
+      drum_selected = util.clamp(drum_selected + d, 1, DRUM_STEPS)
+    elseif n == 2 and not k1_held then
+      params:delta("volume", d)
+      show("bass " .. params:string("volume"))
+    elseif n == 3 and not k1_held then
+      params:delta("drum_level", d)
+      show("drums " .. params:string("drum_level"))
     end
   elseif not k1_held then
     if n == 2 then
@@ -354,15 +453,18 @@ local function draw_top(text)
   screen.text(message or text)
   screen.level(k1_held and 15 or 3)
   screen.move(128, 6)
-  screen.text_right(page == 1 and "SEQ" or "SOUND")
+  screen.text_right(PAGES[page])
 end
 
 -- 16 boxes at the bottom: length, beats and the playing step
-local function draw_strip()
+-- (the bass pattern's, or with `drum` the drum pattern's)
+local function draw_strip(drum)
+  local head = drum and drum_playhead or playhead
+  local len = drum and DRUM_STEPS or length()
   for i = 1, STEPS do
     local level
-    if i == playhead then level = 15
-    elseif i > length() then level = 1
+    if i == head then level = 15
+    elseif i > len then level = 1
     elseif i % 4 == 1 then level = 5
     else level = 3 end
     screen.level(level)
@@ -436,10 +538,67 @@ local function draw_sound()
   draw_strip()
 end
 
+-- a bar for a 0..1 param with a label, for the mix
+local function draw_level(x, label, id)
+  screen.level(4)
+  screen.move(x, 50)
+  screen.text(label)
+  screen.level(1)
+  screen.rect(x + 28, 46, 32, 4)
+  screen.fill()
+  screen.level(10)
+  screen.rect(x + 28, 46, math.max(1, math.floor(params:get_raw(id) * 32 + 0.5)), 4)
+  screen.fill()
+end
+
+local function draw_drum()
+  local d = drums[drum_selected]
+  local text = string.format("%02d", drum_selected) .. (d.kick and " BD" or "")
+    .. (d.hat > 0 and (" " .. HAT_NAMES[d.hat]) or "")
+  if not d.kick and d.hat == 0 then text = text .. " -" end
+  if params:get("drums") == 1 then text = text .. "  (muted)" end
+  draw_top(text)
+
+  screen.level(1)
+  screen.rect((drum_selected - 1) * 8, 9, 8, 31)
+  screen.fill()
+
+  for i = 1, DRUM_STEPS do
+    local x = (i - 1) * 8 + 1
+    local dim = i % 4 == 1 and 4 or 2
+    local s = drums[i]
+    -- kick row: a tall block, or a dim dash
+    if s.kick then
+      screen.level(15)
+      screen.rect(x, 12, 6, 10)
+    else
+      screen.level(dim)
+      screen.rect(x, 16, 6, 2)
+    end
+    screen.fill()
+    -- hat row: closed a short block, open a tall one
+    if s.hat == 2 then
+      screen.level(15)
+      screen.rect(x, 27, 6, 10)
+    elseif s.hat == 1 then
+      screen.level(10)
+      screen.rect(x, 31, 6, 6)
+    else
+      screen.level(dim)
+      screen.rect(x, 33, 6, 2)
+    end
+    screen.fill()
+  end
+
+  draw_level(0, "bass", "volume")
+  draw_level(66, "drums", "drum_level")
+  draw_strip(true)
+end
+
 function redraw()
   if not ready then return end
   screen.clear()
-  if page == 1 then draw_seq() else draw_sound() end
+  if page == 1 then draw_seq() elseif page == 2 then draw_sound() else draw_drum() end
   screen.update()
 end
 

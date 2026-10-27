@@ -1,8 +1,9 @@
-// 303-style acid bass voice for bt1o1: one synth, always running
+// 303-style acid bass voice for bt1o1 (one synth, always running), kick and hihat
 
 Engine_Bt1o1 : CroneEngine {
 
   var voice;
+  var hats; // a new hat cuts the one before (an open hat is choked)
 
   *new { arg context, doneCallback;
     ^super.new(context, doneCallback);
@@ -42,9 +43,33 @@ Engine_Bt1o1 : CroneEngine {
       Out.ar(out, LeakDC.ar(sig * volume) ! 2);
     }).add;
 
+    // kick, 909-style: a sine that drops from 4x to `tune`, a short click,
+    // a little saturation; one synth per hit
+    SynthDef(\bt1o1_kick, {
+      arg out = 0, level = 0.6, tune = 50, decay = 0.4;
+      var pitch = EnvGen.ar(Env([4, 1], [0.05], -6));
+      var amp = EnvGen.ar(Env.perc(0.001, decay, 1, -6), doneAction: 2);
+      var body = SinOsc.ar(tune * pitch, 0.5pi) * amp;
+      var click = HPF.ar(WhiteNoise.ar, 2000) * EnvGen.ar(Env.perc(0.0005, 0.005)) * 0.12;
+      OffsetOut.ar(out, ((((body * 1.5).tanh * 0.8) + click) * level) ! 2);
+    }).add;
+
+    // hihat, 808 / 909-style: six square waves at metallic ratios through a
+    // bandpass and a highpass, a little noise; closed and open differ in decay.
+    // gate 0 (the next hat) fades it out in 5 ms
+    SynthDef(\bt1o1_hat, {
+      arg out = 0, level = 0.5, decay = 0.06, gate = 1;
+      var metal = Mix(Pulse.ar([205.3, 304.4, 369.6, 522.7, 540, 800] * 1.7, 0.5)) / 6;
+      var sig = HPF.ar(BPF.ar(metal, 10000, 0.6) + (WhiteNoise.ar * 0.15), 7000);
+      var env = EnvGen.ar(Env.perc(0.001, decay, 1, -6), doneAction: 2)
+        * EnvGen.ar(Env.asr(0, 1, 0.005), gate, doneAction: 2);
+      OffsetOut.ar(out, (sig * env * level * 4) ! 2);
+    }).add;
+
     server.sync;
 
     voice = Synth.new(\bt1o1, [\out, context.out_b.index], context.xg);
+    hats = Group.new(context.xg);
 
     // note(delay, note, accent, legato): after `delay` seconds set the pitch;
     // legato 0 opens the gate and retriggers the envelopes, legato 1 glides
@@ -65,6 +90,23 @@ Engine_Bt1o1 : CroneEngine {
       server.makeBundle(at.(msg[1]), { voice.set(\gate, 0) });
     });
 
+    // kick(delay, level, tune, decay): a kick after `delay` seconds
+    this.addCommand("kick", "ffff", { arg msg;
+      server.makeBundle(at.(msg[1]), {
+        Synth.new(\bt1o1_kick, [\out, context.out_b.index,
+          \level, msg[2], \tune, msg[3], \decay, msg[4]], context.xg);
+      });
+    });
+
+    // hat(delay, level, decay): a hihat after `delay` seconds; cuts the one before
+    this.addCommand("hat", "fff", { arg msg;
+      server.makeBundle(at.(msg[1]), {
+        hats.set(\gate, 0);
+        Synth.new(\bt1o1_hat, [\out, context.out_b.index,
+          \level, msg[2], \decay, msg[3]], hats);
+      });
+    });
+
     [\cutoff, \res, \env_mod, \decay, \accent, \wave, \drive, \volume].do({ arg name;
       this.addCommand(name, "f", { arg msg; voice.set(name, msg[1]) });
     });
@@ -72,6 +114,7 @@ Engine_Bt1o1 : CroneEngine {
 
   free {
     voice.free;
+    hats.free;
   }
 
 }
