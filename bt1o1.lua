@@ -1,17 +1,11 @@
--- bt1o1 v0.1.0
--- acid bass line: a 303 clone
---
--- K1 + E1 page: SEQ / SOUND
--- K3 play / stop
---
--- SEQ
--- E1 step, E2 note, E3 octave
--- K2 accent, K1 + K2 slide
--- K1 + K3 gate, K1 + E3 length
---
--- SOUND
--- E2 pick knob, E3 change it
--- K1 + K2 random pattern
+-- bt1o1 v0.1.0 by loopmasta
+--  __          __          __
+--    |        /   |        /   |
+--    |       /    |       /    |
+--    |      /     |      /     |
+--    |     /      |     /      |
+--    |    _/       |    _/       |    _
+--     \/          \/          \/
 
 engine.name = 'Bt1o1'
 
