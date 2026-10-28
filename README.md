@@ -77,6 +77,12 @@ Josh Wink, "Higher State of Consciousness", after the transcription on [JonDent'
 
 ## install
 
-copy `bt-1O1.lua`, `lib/` and `preview.png` to `dust/code/bt-1O1/`. `preview.png` is a background for the SELECT preview; stock norns doesn't show it (it needs a small patch to norns' preview menu), so it's optional.
+```
+;install https://github.com/loopmasta/bt-1O1
+```
+
+or copy `bt-1O1.lua`, `lib/` and `preview.png` to `dust/code/bt-1O1/`.
+
+`preview.png` is a background for the SELECT preview. stock norns doesn't show it: it needs a small patch to norns' preview menu (see [shieldxl-trixie](https://github.com/loopmasta/shieldxl-trixie)), so it's optional.
 
 bt-1O1 brings its own SuperCollider engine (`lib/Engine_Bt1o1.sc`). after installing or updating, **restart norns once** (SYSTEM > RESTART), so SuperCollider picks it up.

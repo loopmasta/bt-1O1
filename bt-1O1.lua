@@ -535,8 +535,9 @@ local function draw_seq()
       screen.level(level)
       screen.rect(x, y, 6, 2)
       screen.fill()
-      local n = steps[i % STEPS + 1]
-      if s.slide and n.gate and i < STEPS then
+      -- a slide on the last step of the length goes back to step 1: not drawn
+      local n = steps[i + 1]
+      if s.slide and i < STEPS and i ~= length() and n.gate then
         screen.move(x + 6, y + 1)
         screen.line(x + 8, note_y(n) + 1)
         screen.stroke()
