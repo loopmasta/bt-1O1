@@ -22,15 +22,13 @@ four pages, switched with K1 + E1: SOUND, SEQ, DRUM and MIX. bt-1O1 starts on SO
 | E2 | pick a knob: tune, cutoff, resonance, env mod, decay, accent, wave, drive |
 | E3 | change it |
 | K2 | drums on / off |
-| K1 + K2 | random bass line in the `root` / `scale` from PARAMS |
 
 ### SEQ: the bass line
 
 | control | action |
 |---|---|
 | E1 | select step |
-| E2 | note (C to C) |
-| E3 | octave (down / middle / up) |
+| E2 | note, chromatic over three octaves (C1 to C4) |
 | K2 | accent |
 | K1 + K2 | slide |
 | K1 + K3 | note / rest |
@@ -45,6 +43,7 @@ a slide holds the note into the next step and glides to its pitch, without retri
 | E1 | select drum step |
 | E2 | pick a row: kick (BD), closed hat (HH), open hat (OH) |
 | K2 | that sound on / off at the step |
+| K1 + K2 | its accent on / off (louder by `drum accent`) |
 
 the drums always loop 16 steps, so a shorter bass line drifts against them. an open hat rings until the next hat; a step has either a closed or an open hat, setting one clears the other.
 
@@ -68,8 +67,8 @@ Josh Wink, "Higher State of Consciousness", after the transcription on [JonDent'
 ### params
 
 - **SOUND**: tune (±12 semitones), cutoff, resonance, env mod, decay, accent, wave (saw / square), drive, bass level
-- **SEQUENCER**: length, root, scale (for random)
-- **DRUMS**: drums on / off, drums level, kick level / tune / decay, closed level, open level, closed decay, open decay
+- **SEQUENCER**: length
+- **DRUMS**: drums on / off, drums level, drum accent, kick level / tune / decay, closed level, open level, closed decay, open decay
 
 ### files
 
