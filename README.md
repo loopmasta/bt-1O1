@@ -4,6 +4,8 @@ an acid bass line in the spirit of the TB-303, with a kick and a hihat.
 
 ![bt-1O1](bt-1O1.png)
 
+demo video (screen and sound straight from the norns): [youtube.com/watch?v=wKS4IgnSViM](https://www.youtube.com/watch?v=wKS4IgnSViM)
+
 bt-1O1 is a monophonic 303-style bass voice (saw or square, 4-pole resonant lowpass, accent, slide, drive) played by a 16-step sequencer, plus a kick and a hihat with their own 16-step pattern. it follows the norns clock, so it also syncs to external MIDI clock. the pattern and all settings are saved automatically and come back at the next start.
 
 ## requirements
