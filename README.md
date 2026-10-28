@@ -13,7 +13,16 @@ bt-1O1 is a monophonic 303-style bass voice (saw or square, 4-pole resonant lowp
 
 ## documentation
 
-four pages, switched with K1 + E1: SEQ, SOUND, DRUM and MIX. K3 starts and stops on every page.
+four pages, switched with K1 + E1: SOUND, SEQ, DRUM and MIX. bt-1O1 starts on SOUND. K3 starts and stops on every page.
+
+### SOUND: the 303 knobs
+
+| control | action |
+|---|---|
+| E2 | pick a knob: tune, cutoff, resonance, env mod, decay, accent, wave, drive |
+| E3 | change it |
+| K2 | drums on / off |
+| K1 + K2 | random bass line in the `root` / `scale` from PARAMS |
 
 ### SEQ: the bass line
 
@@ -28,15 +37,6 @@ four pages, switched with K1 + E1: SEQ, SOUND, DRUM and MIX. K3 starts and stops
 | K1 + E3 | pattern length (1–16) |
 
 a slide holds the note into the next step and glides to its pitch, without retriggering. while stopped, editing a step plays its note.
-
-### SOUND: the 303 knobs
-
-| control | action |
-|---|---|
-| E2 | pick a knob: tune, cutoff, resonance, env mod, decay, accent, wave, drive |
-| E3 | change it |
-| K2 | drums on / off |
-| K1 + K2 | random bass line in the `root` / `scale` from PARAMS |
 
 ### DRUM: kick and hihat
 
@@ -67,7 +67,7 @@ Josh Wink, "Higher State of Consciousness", after the transcription on [JonDent'
 
 ### params
 
-- **SOUND**: tune (±12 semitones), cutoff, resonance, env mod, decay, accent, wave (saw / square), drive, volume
+- **SOUND**: tune (±12 semitones), cutoff, resonance, env mod, decay, accent, wave (saw / square), drive, bass level
 - **SEQUENCER**: length, root, scale (for random)
 - **DRUMS**: drums on / off, drums level, kick level / tune / decay, closed level, open level, closed decay, open decay
 

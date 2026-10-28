@@ -14,7 +14,7 @@ local BASE_NOTE = 36  -- C2: note 0, octave 0
 local LATENCY = 0.025 -- every step sounds this long after its sixteenth on the clock
 local GATE = 0.5      -- gate length, in steps
 local DRUM_STEPS = 16 -- the drums always loop one bar, whatever the bass length
-local PAGES = {"SEQ", "SOUND", "DRUM", "MIX"}
+local PAGES = {"SOUND", "SEQ", "DRUM", "MIX"} -- in K1 + E1 order
 -- the rows on the DRUM page, top to bottom: the drum step's field and its label
 local DRUM_ROWS = {
   {id = "kick", label = "BD"},
@@ -70,7 +70,7 @@ local selected = 1
 local drums = {}       -- {kick = bool, hat = bool (closed), open = bool}
 local drum_selected = 1
 local drum_row = 1     -- picked row on DRUM (kick)
-local page = 1 -- 1 SEQ, 2 SOUND, 3 DRUM, 4 MIX
+local page = 1 -- index in PAGES: starts on SOUND
 local knob = 2 -- picked knob on SOUND (cutoff)
 local fader = 1 -- picked fader on MIX (bass)
 local k1_held = false
@@ -332,7 +332,7 @@ local function add_params()
   params:set_action("wave", function(x) engine.wave(x - 1); dirty = true end)
 
   add("drive", "drive", controlspec.new(0, 1, "lin", 0, 0.2, ""), fmt_percent)
-  add("volume", "volume", controlspec.new(0, 1, "lin", 0, 0.6, ""), fmt_percent)
+  add("volume", "bass level", controlspec.new(0, 1, "lin", 0, 0.6, ""), fmt_percent)
 
   params:add_group("bt1o1_seq", "SEQUENCER", 3)
   params:add_number("length", "length", 1, STEPS, STEPS)
@@ -394,9 +394,10 @@ function key(n, z)
   if z == 0 then return end
 
   local step = steps[selected]
+  local name = PAGES[page]
   if n == 3 and not k1_held then
     if running then stop() else start() end
-  elseif page == 1 then
+  elseif name == "SEQ" then
     if n == 2 and not k1_held then
       step.accent = not step.accent
     elseif n == 2 then
@@ -405,7 +406,7 @@ function key(n, z)
       step.gate = not step.gate
       preview(step)
     end
-  elseif page == 3 then
+  elseif name == "DRUM" then
     if n == 2 and not k1_held then
       local d = drums[drum_selected]
       local id = DRUM_ROWS[drum_row].id
@@ -415,9 +416,9 @@ function key(n, z)
       if id == "open" and d.open then d.hat = false end
       if d[id] then preview_drums({[id] = true}) end
     end
-  elseif page == 4 then
+  elseif name == "MIX" then
     -- nothing on K2 yet
-  elseif n == 2 and k1_held then
+  elseif n == 2 and k1_held then -- SOUND
     randomize()
   elseif n == 2 then
     params:set("drums", params:get("drums") == 2 and 1 or 2)
@@ -428,9 +429,10 @@ end
 
 function enc(n, d)
   if not ready then return end
+  local name = PAGES[page]
   if n == 1 and k1_held then
     page = util.clamp(page + d, 1, #PAGES)
-  elseif page == 1 then
+  elseif name == "SEQ" then
     local step = steps[selected]
     if n == 1 then
       selected = util.clamp(selected + d, 1, STEPS)
@@ -446,19 +448,19 @@ function enc(n, d)
       step.gate = true
       preview(step)
     end
-  elseif page == 3 then
+  elseif name == "DRUM" then
     if n == 1 then
       drum_selected = util.clamp(drum_selected + d, 1, DRUM_STEPS)
     elseif n == 2 and not k1_held then
       drum_row = util.clamp(drum_row + d, 1, #DRUM_ROWS)
     end
-  elseif page == 4 then
+  elseif name == "MIX" then
     if n == 2 and not k1_held then
       fader = util.clamp(fader + d, 1, #FADERS)
     elseif n == 3 and not k1_held then
       params:delta(FADERS[fader].id, d)
     end
-  elseif not k1_held then
+  elseif not k1_held then -- SOUND
     if n == 2 then
       knob = util.clamp(knob + d, 1, #KNOBS)
     elseif n == 3 then
@@ -502,6 +504,15 @@ local function draw_strip(drum)
   end
 end
 
+-- the selected step: a bright bar under its column, above the strip. not a dim
+-- column behind the notes: on the OLED, rows with many bright pixels darken
+-- the dim pixels next to them, which showed as dark lines across the column
+local function draw_marker(i)
+  screen.level(15)
+  screen.rect((i - 1) * 8 + 1, 54, 6, 2)
+  screen.fill()
+end
+
 -- y of a step's note in the piano roll: one pixel per semitone, C1 at the bottom
 local function note_y(step)
   return 50 - (step.note + 12 * step.octave + 12)
@@ -518,10 +529,7 @@ local function draw_seq()
     text = text .. "rest"
   end
   draw_top(text)
-
-  screen.level(1)
-  screen.rect((selected - 1) * 8, 9, 8, 47)
-  screen.fill()
+  draw_marker(selected)
 
   for i = 1, STEPS do
     local s = steps[i]
@@ -574,15 +582,11 @@ local function draw_drum()
   if params:get("drums") == 1 then text = text .. "  (muted)" end
   draw_top(text)
 
-  -- the selected step's column and the picked row dim, where they cross a bit brighter
+  -- the selected step in the picked row: a bright bar right under it
+  -- (no dim bands, see draw_marker)
   local function row_y(r) return (r - 1) * 15 + 10 end
-  screen.level(1)
-  screen.rect((drum_selected - 1) * 8, 9, 8, 46)
-  screen.fill()
-  screen.rect(0, row_y(drum_row) - 1, 128, 14)
-  screen.fill()
-  screen.level(3)
-  screen.rect((drum_selected - 1) * 8, row_y(drum_row) - 1, 8, 14)
+  screen.level(15)
+  screen.rect((drum_selected - 1) * 8 + 1, row_y(drum_row) + 12, 6, 2)
   screen.fill()
 
   -- one row per sound: a block for a hit, a dim dash (brighter on the beats) for none
@@ -639,9 +643,10 @@ end
 function redraw()
   if not ready then return end
   screen.clear()
-  if page == 1 then draw_seq()
-  elseif page == 2 then draw_sound()
-  elseif page == 3 then draw_drum()
+  local name = PAGES[page]
+  if name == "SOUND" then draw_sound()
+  elseif name == "SEQ" then draw_seq()
+  elseif name == "DRUM" then draw_drum()
   else draw_mix() end
   screen.update()
 end
