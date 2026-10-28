@@ -14,8 +14,13 @@ local BASE_NOTE = 36  -- C2: note 0, octave 0
 local LATENCY = 0.025 -- every step sounds this long after its sixteenth on the clock
 local GATE = 0.5      -- gate length, in steps
 local DRUM_STEPS = 16 -- the drums always loop one bar, whatever the bass length
-local PAGES = {"SEQ", "SOUND", "DRUM"}
-local HAT_NAMES = {"HH", "OH"} -- hat 1 closed, 2 open
+local PAGES = {"SEQ", "SOUND", "DRUM", "MIX"}
+-- the rows on the DRUM page, top to bottom: the drum step's field and its label
+local DRUM_ROWS = {
+  {id = "kick", label = "BD"},
+  {id = "hat", label = "HH"},  -- closed hat
+  {id = "open", label = "OH"}, -- open hat
+}
 
 local NOTE_NAMES = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"}
 local SCALES = {
@@ -41,6 +46,14 @@ local KNOBS = {
   {id = "drive", label = "DRV"},
 }
 
+-- the faders on the MIX page, in screen order
+local FADERS = {
+  {id = "volume", label = "BASS"},
+  {id = "kick_level", label = "BD"},
+  {id = "hat_level", label = "HH"},
+  {id = "open_level", label = "OH"},
+}
+
 -- the default pattern: Josh Wink, "Higher State of Consciousness" (1995),
 -- after the transcription on djjondent.blogspot.com (famous 303 bassline
 -- patterns): G, G up an octave and B, every step accented.
@@ -54,10 +67,12 @@ local DEMO = {
 
 local steps = {}
 local selected = 1
-local drums = {}       -- {kick = bool, hat = 0 off / 1 closed / 2 open}
+local drums = {}       -- {kick = bool, hat = bool (closed), open = bool}
 local drum_selected = 1
-local page = 1 -- 1 SEQ, 2 SOUND, 3 DRUM
+local drum_row = 1     -- picked row on DRUM (kick)
+local page = 1 -- 1 SEQ, 2 SOUND, 3 DRUM, 4 MIX
 local knob = 2 -- picked knob on SOUND (cutoff)
+local fader = 1 -- picked fader on MIX (bass)
 local k1_held = false
 local ready = false -- init done: keys and encoders can come in before (the params don't exist yet)
 
@@ -103,7 +118,7 @@ end
 local function demo_drums()
   local pattern = {}
   for i = 1, DRUM_STEPS do
-    pattern[i] = {kick = i % 4 == 1, hat = i % 4 == 3 and 1 or 0}
+    pattern[i] = {kick = i % 4 == 1, hat = i % 4 == 3, open = false}
   end
   return pattern
 end
@@ -113,9 +128,16 @@ local function play_kick(delay)
     params:get("kick_tune"), params:get("kick_decay"))
 end
 
-local function play_hat(delay, hat)
-  engine.hat(delay, params:get("hat_level") * params:get("drum_level"),
-    params:get(hat == 2 and "hat_open_decay" or "hat_decay"))
+local function play_hat(delay, open)
+  engine.hat(delay, params:get(open and "open_level" or "hat_level") * params:get("drum_level"),
+    params:get(open and "hat_open_decay" or "hat_decay"))
+end
+
+-- the drum step's sounds (closed and open hat are never on the same step)
+local function play_drums(delay, d)
+  if d.kick then play_kick(delay) end
+  if d.hat then play_hat(delay, false) end
+  if d.open then play_hat(delay, true) end
 end
 
 -- sequencer ------------------------------------------------------------------
@@ -147,10 +169,7 @@ local function run()
     -- the drums count sixteenths since start, not bass steps, so they keep
     -- the bar whatever the bass length
     local d = ticks % DRUM_STEPS + 1
-    if params:get("drums") == 2 then
-      if drums[d].kick then play_kick(delay) end
-      if drums[d].hat > 0 then play_hat(delay, drums[d].hat) end
-    end
+    if params:get("drums") == 2 then play_drums(delay, drums[d]) end
     drum_playhead = d
     ticks = ticks + 1
     position = position % length() + 1
@@ -189,9 +208,7 @@ end
 
 -- while stopped: hear the drum step's sounds
 local function preview_drums(d)
-  if running then return end
-  if d.kick then play_kick(0) end
-  if d.hat > 0 then play_hat(0, d.hat) end
+  if not running then play_drums(0, d) end
 end
 
 local function randomize()
@@ -217,7 +234,8 @@ local function save_pattern()
   end
   table.insert(lines, "  drums = {")
   for _, d in ipairs(drums) do
-    table.insert(lines, string.format("    {kick = %s, hat = %d},", tostring(d.kick), d.hat))
+    table.insert(lines, string.format("    {kick = %s, hat = %s, open = %s},",
+      tostring(d.kick), tostring(d.hat), tostring(d.open)))
   end
   table.insert(lines, "  },")
   table.insert(lines, "}")
@@ -254,7 +272,12 @@ local function load_pattern()
         for i = 1, DRUM_STEPS do
           local d = loaded.drums[i]
           if type(d) == "table" then
-            drum_pattern[i] = {kick = d.kick == true, hat = util.clamp(math.floor(tonumber(d.hat) or 0), 0, 2)}
+            if type(d.hat) == "number" then
+              -- saved before the open hat had its own row: hat 0 off, 1 closed, 2 open
+              drum_pattern[i] = {kick = d.kick == true, hat = d.hat == 1, open = d.hat == 2}
+            else
+              drum_pattern[i] = {kick = d.kick == true, hat = d.hat == true, open = d.open == true and d.hat ~= true}
+            end
           end
         end
       end
@@ -319,16 +342,17 @@ local function add_params()
   for i, s in ipairs(SCALES) do scale_names[i] = s.name end
   params:add_option("scale", "scale", scale_names, 1)
 
-  params:add_group("bt1o1_drums", "DRUMS", 8)
+  params:add_group("bt1o1_drums", "DRUMS", 9)
   params:add_option("drums", "drums", {"off", "on"}, 2)
   params:add_control("drum_level", "drums level", controlspec.new(0, 1, "lin", 0, 1, ""), fmt_percent)
   params:add_control("kick_level", "kick level", controlspec.new(0, 1, "lin", 0, 0.6, ""), fmt_percent)
   params:add_control("kick_tune", "kick tune", controlspec.new(30, 100, "exp", 0, 50, "Hz"), fmt_hz)
   params:add_control("kick_decay", "kick decay", controlspec.new(0.1, 1.5, "exp", 0, 0.4, "s"), fmt_seconds)
-  params:add_control("hat_level", "hat level", controlspec.new(0, 1, "lin", 0, 0.5, ""), fmt_percent)
+  params:add_control("hat_level", "closed level", controlspec.new(0, 1, "lin", 0, 0.5, ""), fmt_percent)
+  params:add_control("open_level", "open level", controlspec.new(0, 1, "lin", 0, 0.5, ""), fmt_percent)
   params:add_control("hat_decay", "closed decay", controlspec.new(0.02, 0.3, "exp", 0, 0.06, "s"), fmt_seconds)
   params:add_control("hat_open_decay", "open decay", controlspec.new(0.1, 1.5, "exp", 0, 0.5, "s"), fmt_seconds)
-  for _, id in ipairs({"drums", "drum_level"}) do
+  for _, id in ipairs({"drums", "drum_level", "kick_level", "hat_level", "open_level"}) do
     params:set_action(id, function() dirty = true end)
   end
 end
@@ -382,14 +406,17 @@ function key(n, z)
       preview(step)
     end
   elseif page == 3 then
-    local d = drums[drum_selected]
     if n == 2 and not k1_held then
-      d.kick = not d.kick
-      preview_drums({kick = d.kick, hat = 0})
-    elseif n == 2 then
-      d.hat = (d.hat + 1) % 3 -- off, closed, open
-      preview_drums({kick = false, hat = d.hat})
+      local d = drums[drum_selected]
+      local id = DRUM_ROWS[drum_row].id
+      d[id] = not d[id]
+      -- one hat per step: an open hat would be cut by the closed one anyway
+      if id == "hat" and d.hat then d.open = false end
+      if id == "open" and d.open then d.hat = false end
+      if d[id] then preview_drums({[id] = true}) end
     end
+  elseif page == 4 then
+    -- nothing on K2 yet
   elseif n == 2 and k1_held then
     randomize()
   elseif n == 2 then
@@ -423,11 +450,13 @@ function enc(n, d)
     if n == 1 then
       drum_selected = util.clamp(drum_selected + d, 1, DRUM_STEPS)
     elseif n == 2 and not k1_held then
-      params:delta("volume", d)
-      show("bass " .. params:string("volume"))
+      drum_row = util.clamp(drum_row + d, 1, #DRUM_ROWS)
+    end
+  elseif page == 4 then
+    if n == 2 and not k1_held then
+      fader = util.clamp(fader + d, 1, #FADERS)
     elseif n == 3 and not k1_held then
-      params:delta("drum_level", d)
-      show("drums " .. params:string("drum_level"))
+      params:delta(FADERS[fader].id, d)
     end
   elseif not k1_held then
     if n == 2 then
@@ -538,67 +567,82 @@ local function draw_sound()
   draw_strip()
 end
 
--- a bar for a 0..1 param with a label, for the mix
-local function draw_level(x, label, id)
-  screen.level(4)
-  screen.move(x, 50)
-  screen.text(label)
-  screen.level(1)
-  screen.rect(x + 28, 46, 32, 4)
-  screen.fill()
-  screen.level(10)
-  screen.rect(x + 28, 46, math.max(1, math.floor(params:get_raw(id) * 32 + 0.5)), 4)
-  screen.fill()
-end
-
 local function draw_drum()
-  local d = drums[drum_selected]
-  local text = string.format("%02d", drum_selected) .. (d.kick and " BD" or "")
-    .. (d.hat > 0 and (" " .. HAT_NAMES[d.hat]) or "")
-  if not d.kick and d.hat == 0 then text = text .. " -" end
+  local row = DRUM_ROWS[drum_row]
+  local text = string.format("%02d %s %s", drum_selected, row.label,
+    drums[drum_selected][row.id] and "on" or "off")
   if params:get("drums") == 1 then text = text .. "  (muted)" end
   draw_top(text)
 
+  -- the selected step's column and the picked row dim, where they cross a bit brighter
+  local function row_y(r) return (r - 1) * 15 + 10 end
   screen.level(1)
-  screen.rect((drum_selected - 1) * 8, 9, 8, 31)
+  screen.rect((drum_selected - 1) * 8, 9, 8, 46)
+  screen.fill()
+  screen.rect(0, row_y(drum_row) - 1, 128, 14)
+  screen.fill()
+  screen.level(3)
+  screen.rect((drum_selected - 1) * 8, row_y(drum_row) - 1, 8, 14)
   screen.fill()
 
-  for i = 1, DRUM_STEPS do
-    local x = (i - 1) * 8 + 1
-    local dim = i % 4 == 1 and 4 or 2
-    local s = drums[i]
-    -- kick row: a tall block, or a dim dash
-    if s.kick then
-      screen.level(15)
-      screen.rect(x, 12, 6, 10)
-    else
-      screen.level(dim)
-      screen.rect(x, 16, 6, 2)
+  -- one row per sound: a block for a hit, a dim dash (brighter on the beats) for none
+  for r, dr in ipairs(DRUM_ROWS) do
+    local y = row_y(r)
+    for i = 1, DRUM_STEPS do
+      local x = (i - 1) * 8 + 1
+      if drums[i][dr.id] then
+        screen.level(r == drum_row and 15 or 10)
+        screen.rect(x, y + 1, 6, 10)
+      else
+        screen.level(i % 4 == 1 and 4 or 2)
+        screen.rect(x, y + 5, 6, 2)
+      end
+      screen.fill()
     end
-    screen.fill()
-    -- hat row: closed a short block, open a tall one
-    if s.hat == 2 then
-      screen.level(15)
-      screen.rect(x, 27, 6, 10)
-    elseif s.hat == 1 then
-      screen.level(10)
-      screen.rect(x, 31, 6, 6)
-    else
-      screen.level(dim)
-      screen.rect(x, 33, 6, 2)
-    end
-    screen.fill()
   end
 
-  draw_level(0, "bass", "volume")
-  draw_level(66, "drums", "drum_level")
   draw_strip(true)
+end
+
+-- text centered on x, on a whole pixel: text_center can land on a half pixel,
+-- which blurs the font
+local function text_center(x, y, text)
+  local w = screen.text_extents(text)
+  screen.move(x - math.floor(w / 2), y)
+  screen.text(text)
+end
+
+-- vertical faders, the value above and the label under each, the picked one bright
+local function draw_mix()
+  local p = params:lookup_param(FADERS[fader].id)
+  draw_top(p.name .. " " .. p:string() .. (params:get("drums") == 1 and "  (muted)" or ""))
+
+  for i, f in ipairs(FADERS) do
+    local x = (i - 1) * 32 + 16 -- the fader's center
+    local raw = params:get_raw(f.id)
+    local h = math.max(1, math.floor(raw * 28 + 0.5))
+    local level = i == fader and 15 or 4
+    screen.level(level)
+    text_center(x, 15, tostring(math.floor(params:get(f.id) * 100 + 0.5)))
+    screen.level(i == fader and 3 or 1)
+    screen.rect(x - 4, 18, 8, 28)
+    screen.fill()
+    screen.level(level)
+    screen.rect(x - 4, 46 - h, 8, h)
+    screen.fill()
+    screen.level(level)
+    text_center(x, 55, f.label)
+  end
+  draw_strip()
 end
 
 function redraw()
   if not ready then return end
   screen.clear()
-  if page == 1 then draw_seq() elseif page == 2 then draw_sound() else draw_drum() end
+  if page == 1 then draw_seq()
+  elseif page == 2 then draw_sound()
+  elseif page == 3 then draw_drum()
+  else draw_mix() end
   screen.update()
 end
 
